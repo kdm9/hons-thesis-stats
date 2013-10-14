@@ -3,4 +3,7 @@
 .RData
 *.swp
 data
+figure
+*.html
+*.md
 *.pdf
