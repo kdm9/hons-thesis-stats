@@ -1,0 +1,66 @@
+Stats for the computation cost of pipelines analysis
+====================================================
+
+Essentially just an ANOVA and some plots.
+
+```{r}
+pltimes <- read.csv("../data/thesistables/br-res-pltimes-raw.csv")
+pltimes$usersys <- pltimes$user +  pltimes$sys
+
+real.aov <- aov(real~Pipeline, data=pltimes)
+user.aov <- aov(user~Pipeline, data=pltimes)
+usersys.aov <- aov(usersys~Pipeline, data=pltimes)
+
+summary(real.aov)
+summary(user.aov)
+summary(usersys.aov)
+
+plot(real.aov)
+plot(user.aov)
+plot(usersys.aov)
+
+TukeyHSD(real.aov)
+TukeyHSD(user.aov)
+TukeyHSD(usersys.aov)
+```
+
+So it's *really* signficant.
+
+```{r fig.width=7.5, fig.height=5}
+library(ggplot2)
+library(plyr)
+library(reshape2)
+
+pltimes$Rep <- NULL
+pltimes$usersys <- NULL
+pltimes.melt <- melt(pltimes, "Pipeline", variable.name="timemeasure", value.name="minutes")
+pltimes.melt$minutes <- pltimes.melt$minutes /60 # was seconds, now it's actually minutes
+
+pltimes.melt.summ <- ddply(
+	pltimes.melt,
+	.(Pipeline, timemeasure),
+	summarise,
+	meanmins=mean(minutes),
+	sdmins=sd(minutes)
+	)
+
+
+summary(pltimes.melt.summ)
+
+pltimes.plot <- ggplot(pltimes.melt.summ, aes(x=timemeasure, y=meanmins, group=Pipeline)) +
+	ggtitle("Time cost of RNAseq analysis pipelines") +
+	xlab("Unix time measure") +
+	ylab("Mean Minutes per Run") +
+	geom_bar(stat="identity", position="dodge", aes(fill=Pipeline)) +
+	geom_errorbar(position="dodge", aes(ymin=meanmins-sdmins, ymax=meanmins+sdmins)) +
+	theme_bw() +
+	scale_fill_grey() +
+	scale_color_grey() +
+	theme()
+
+print(pltimes.plot)
+
+pdf('pltimes_plot.pdf', width=7.5, height=5)
+print(pltimes.plot)
+dev.off()
+```
