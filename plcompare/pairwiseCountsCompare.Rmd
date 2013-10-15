@@ -1,0 +1,54 @@
+Pairwise correlations between counts
+====================================
+
+
+
+```{r fig.width=7.5, fig.height=6.5}
+root <- "../data/plcompare"
+pipelines <- dir(root)
+samples <- dir(paste(root,pipelines[1], sep="/"))
+count.file.list <- lapply(samples, function (s) paste0(root, "/", pipelines, "/", s, "/", s, ".counts"))
+
+
+count.mat.list <- lapply(
+  count.file.list,
+  function (x) {
+    m <- sapply(
+      x,
+      function (f) {
+        t <- read.delim(f)
+        t <- t[grep("AT.G", t$geneid),]
+        a <- t$nreads
+        names(a) <- t$geneid
+        a
+      },
+      simplify = "array"
+      )
+    colnames(m) <- pipelines
+    m
+    }
+  )
+
+str(count.mat.list)
+
+sn=1
+
+sample <- count.mat.list[[sn]]
+log.mat <- log(sample+1)
+#log.mat <- sample
+pdf("subread.vs.tophat.pdf", width=7.5, height=7.5)
+plot(log.mat, pch='.', cex=2, main="Correlation of Count Data\nfrom Subread and Tophat2 Aligners",
+     xlab="Subread tagwise counts [log(n+1)]", ylab="Tophat2 tagwise counts [log(n+1)]")
+abline(a=0, b=1)
+mdl <- lm(tophat~subread, as.data.frame(log.mat))
+abline(mdl, col="red")
+legend(
+       "bottomright",
+       lty=1,
+       legend=c("y=1x ruled line", "Fitted relationship slope"),
+       col=c("black", "red")
+)
+dev.off()
+summary(mdl)
+
+```
