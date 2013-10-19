@@ -1,0 +1,95 @@
+\documentclass{article}
+
+\begin{document}
+
+\section{Full qPCR plate (qpcr\#2)}
+
+<<load>>=
+library(plyr)
+library(ggplot2)
+library(reshape2)
+control <- "PP2AA3 3'"
+
+qpcr <- read.csv("data/20130905_qPCR2_allcondAllprimers_linreg_result.csv", skip=3)
+qpcr <- read.csv("../data/20130905_qPCR2_allcondAllprimers_linreg_result.csv", skip=3)
+qpcr <- qpcr[,-length(qpcr)]
+
+n0.arr <- matrix(qpcr$N0, ncol=24)
+colnames(n0.arr) <- as.character(qpcr$Tissue[1:24])
+rownames(n0.arr) <- qpcr$Amplicon[seq(1,384,24)]
+
+qpcr$Rep <- c(rep(1, 24), rep(rep(1:3,each=24), 5))
+qpcr$Rep <- rep_len(1:3, 384)
+qpcr$Sample <- paste(qpcr$Tissue, qpcr$Rep)
+
+qpcr[which(qpcr$Quality_checks != "0 - - - - - - - - - - - - -"), "N0"] <- NA
+
+# split out growth treat. and timepoint
+tissue <- sub(" EL", "EL",as.character(qpcr$Tissue))                
+gcandtime <- t(simplify2array(strsplit(tissue, " ")))
+
+qpcr$GrowthCond <- gcandtime[,1]
+qpcr$Time <- gcandtime[,2]
+
+qpcr.sum <- ddply(      #
+  qpcr,     #
+  .(GrowthCond, Time, Rep, Amplicon),  #
+  summarise,            #
+  N0=mean(N0, na.rm=T),          #
+  Cq=mean(Cq, na.rm=T),          #
+  Eff=mean(indiv_PCR_eff, na.rm=T)   #
+  )
+
+qpcr.sum$Sample <- with(qpcr.sum, paste(GrowthCond, Time, Rep))
+
+samples <- as.character(unique(qpcr.sum[,"Sample"]))
+for (samp in samples) {
+  this.samp <- qpcr.sum$Sample == samp
+  qpcr.sum[this.samp,"N0.Norm"] <- qpcr.sum[this.samp, "N0"] / 
+      qpcr.sum[this.samp & qpcr.sum$Amplicon == control, "N0"]
+}
+qpcr.sum$Sample <- NULL
+
+qpcr.plot <- ddply(                                                 #
+  qpcr.sum,                                                         #
+  .(GrowthCond, Time, Amplicon),                                    #
+  summarise,                                                        #
+  N0=mean(N0.Norm),                                                 #
+  N0.sd=sd(N0.Norm)                                                 #
+  )
+
+
+
+
+#TODO: this bit:
+qpcr.fc <- ddply(qpcr.sum, .(GrowthCond, Amplicon, Rep), summarise, #
+  FC=N0.Norm[which(Time == "1hEL")]/N0.Norm[which(Time == "0h")])
+x <- qpcr.sum[which(qpcr.sum$Time=="1hEL"),"N0.Norm"]/
+  qpcr.sum[which(qpcr.sum$Time=="0h"),"N0.Norm"]
+
+# plots and tests
+amps <- as.character(unique(qpcr.sum$Amplicon))
+for (amp in amps) {
+  print(amp)
+  df <- qpcr.sum[which(qpcr.sum$Amplicon == amp),]
+  a <- aov(N0.Norm~GrowthCond * Time , data=df)
+  print(summary(a))
+  hsd <- TukeyHSD(a)
+  print(hsd)
+  print(lapply(hsd, function(h) h[which(h[,4]<0.05),]))
+  
+  qp <- qpcr.plot[qpcr.plot$Amplicon==amp,]
+  plt <- ggplot(qp, aes(y=N0, x=GrowthCond, group=Time)) +  #
+    geom_bar(                                               #
+      stat="identity",                                      #
+      aes(fill=Time, color=Time),                   #
+      position="dodge")
+  
+  print(plt)
+}
+
+
+@
+
+
+\end{document}
