@@ -7,3 +7,6 @@ figure
 *.html
 *.md
 *.pdf
+*.tex
+*.log
+*.synctex.gz
