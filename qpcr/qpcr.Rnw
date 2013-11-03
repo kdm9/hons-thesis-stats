@@ -8,11 +8,14 @@
 library(plyr)
 library(ggplot2)
 library(reshape2)
-control <- "PP2AA3 3'"
+control <- "PP2AA3"
 
 qpcr <- read.csv("data/20130905_qPCR2_allcondAllprimers_linreg_result.csv", skip=3)
 qpcr <- read.csv("../data/20130905_qPCR2_allcondAllprimers_linreg_result.csv", skip=3)
+
 qpcr <- qpcr[,-length(qpcr)]
+
+qpcr$Tissue <- as.factor(sub("B3", "Static", as.character(qpcr$Tissue)))
 
 n0.arr <- matrix(qpcr$N0, ncol=24)
 colnames(n0.arr) <- as.character(qpcr$Tissue[1:24])
@@ -39,6 +42,8 @@ qpcr.sum <- ddply(      #
   Cq=mean(Cq, na.rm=T),          #
   Eff=mean(indiv_PCR_eff, na.rm=T)   #
   )
+qpcr.sum$Amplicon <- rep(c("APX2", "ELIP2", "GAP", "ELIP1", "LHCB1.4","PP2AA3"),24)
+qpcr.sum$N0[qpcr.sum$N0==NaN] <- NA
 
 qpcr.sum$Sample <- with(qpcr.sum, paste(GrowthCond, Time, Rep))
 
@@ -54,18 +59,24 @@ qpcr.plot <- ddply(                                                 #
   qpcr.sum,                                                         #
   .(GrowthCond, Time, Amplicon),                                    #
   summarise,                                                        #
-  N0=mean(N0.Norm),                                                 #
-  N0.sd=sd(N0.Norm)                                                 #
+  N0=mean(N0.Norm, na.rm=T),                                                 #
+  N0.sd=sd(N0.Norm, na.rm=T)                                                 #
   )
 
 
 
-
-#TODO: this bit:
 qpcr.fc <- ddply(qpcr.sum, .(GrowthCond, Amplicon, Rep), summarise, #
   FC=N0.Norm[which(Time == "1hEL")]/N0.Norm[which(Time == "0h")])
-x <- qpcr.sum[which(qpcr.sum$Time=="1hEL"),"N0.Norm"]/
-  qpcr.sum[which(qpcr.sum$Time=="0h"),"N0.Norm"]
+
+qpcr.fc$FC[qpcr.fc$FC==NaN] <- NA
+
+qpcr.plot.fc <- ddply(                                                 #
+  qpcr.fc,                                                         #
+  .(GrowthCond, Amplicon),                                    #
+  summarise,                                                        #
+  fc=mean(FC, na.rm=T),                                                 #
+  fc.sd=sd(FC, na.rm=T)                                                 #
+  )
 
 # plots and tests
 amps <- as.character(unique(qpcr.sum$Amplicon))
@@ -80,15 +91,105 @@ for (amp in amps) {
   
   qp <- qpcr.plot[qpcr.plot$Amplicon==amp,]
   plt <- ggplot(qp, aes(y=N0, x=GrowthCond, group=Time)) +  #
+    ggtitle(amp) +                                          #
+    xlab("Growth Condition") +                              #
+    scale_colour_discrete(name="Hot Excess Light") +        #
+    scale_fill_discrete(name="Hot Excess Light") +          #
     geom_bar(                                               #
       stat="identity",                                      #
-      aes(fill=Time, color=Time),                   #
-      position="dodge")
-  
+      aes(fill=Time, color=Time),                           #
+      position="dodge") +                                   #
+    geom_errorbar(                                          #
+      aes(ymin=N0-N0.sd, ymax=N0+N0.sd),                    #
+      position="dodge") +                                     #
+  theme_bw(14)
   print(plt)
+  
+  ########### fold change ##########
+#   df <- qpcr.fc[which(qpcr.sum$Amplicon == amp),]
+#   a <- aov(N0.Norm~GrowthCond * Time , data=df)
+#   print(summary(a))
+#   hsd <- TukeyHSD(a)
+#   print(hsd)
+#   print(lapply(hsd, function(h) h[which(h[,4]<0.05),]))
+#   
+  qpf <-  qpcr.plot.fc[qpcr.plot.fc$Amplicon==amp,]
+  plt <- ggplot(qpf, aes(y=fc, x=Amplicon, group=GrowthCond)) +  #
+   ggtitle(paste0("Induction of ", amp," by one hour of Hot Excess")) + #
+   xlab("Growth Condition") +                              #
+   ylab("Fold Change (relative to 0h)")  +                 #
+   scale_colour_discrete(name="Growth Condition") +        #
+    scale_fill_discrete(name="Growth Condition") +          #
+    geom_bar(                                               #
+      stat="identity",                                      #
+     aes(fill=GrowthCond, color=GrowthCond),                           #
+      position="dodge") +                                   #
+    geom_errorbar(                                          #
+      aes(ymin=fc-fc.sd, ymax=fc+fc.sd),                    #
+      position="dodge") +                                   #
+    theme_bw(14) +
+   theme(
+     #axis.text.x = element_text(angle = 45, hjust = 1)
+      )
+  print(plt)
+  pdf(paste0(amp, ".pdf"))
+  print(plt)
+  dev.off()
 }
 
+ggplot(qpcr.plot, aes(y=N0, x=GrowthCond, group=Time)) +  #
+  ggtitle("Expresssion of Hot Excess Light Marker Genes") + #
+  xlab("Growth Condition") +                              #
+  scale_colour_discrete(name="Growth Condition") +        #
+  scale_fill_discrete(name="Growth Condition") +          #
+  geom_bar(                                               #
+    stat="identity",                                      #
+    aes(fill=Time, color=Time),                           #
+    position="dodge") +                                   #
+  geom_errorbar(                                          #
+    aes(ymin=N0-N0.sd, ymax=N0+N0.sd),                    #
+    position="dodge") +                                   #
+  theme_bw(14) + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+    ) + 
+  facet_grid(~Amplicon)
 
+ggplot(qpcr.plot.fc, aes(y=fc, x=GrowthCond, group=GrowthCond)) +  #
+  ggtitle("Induction by one hour of Hot Excess") +        #
+  ylab("Fold Change (relative to 0h)")  +                 #
+  xlab("Growth Condition") +                              #
+  scale_colour_discrete(name="Growth Condition") +        #
+  scale_fill_discrete(name="Growth Condition") +          #
+  geom_bar(                                               #
+    stat="identity",                                      #
+    aes(fill=GrowthCond, color=GrowthCond),               #
+    position="dodge") +                                   #
+  geom_errorbar(                                          #
+    aes(ymin=fc-fc.sd, ymax=fc+fc.sd),                    #
+    position="dodge") +                                   #
+  theme_bw(14) + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+    ) + 
+  facet_grid(~Amplicon)
+ggplot(qpcr.plot.fc, aes(y=log(fc), x=Amplicon, group=GrowthCond)) +  #
+  ggtitle("Expresssion of Hot Excess Light Marker Genes") + #
+  ylab("log(Fold Change)")  +                 #
+  xlab("Growth Condition") +                              #
+  scale_colour_discrete(name="Growth Condition") +        #
+  scale_fill_discrete(name="Growth Condition") +          #
+  geom_bar(                                               #
+    stat="identity",                                      #
+    aes(fill=GrowthCond, color=GrowthCond),               #
+    position="dodge") +                                   #
+  geom_errorbar(                                          #
+    aes(ymin=log(fc-fc.sd), ymax=log(fc+fc.sd)),                    #
+    position="dodge") +                                   #
+  theme_bw(14) + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+    )
 @
 
 

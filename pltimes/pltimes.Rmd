@@ -44,19 +44,24 @@ pltimes.melt.summ <- ddply(
 	sdmins=sd(minutes)
 	)
 
+print(pltimes.melt.summ)
 
 summary(pltimes.melt.summ)
 
-pltimes.plot <- ggplot(pltimes.melt.summ, aes(x=timemeasure, y=meanmins, group=Pipeline)) +
+pltimes.plot <- ggplot(pltimes.melt.summ, aes(x=Pipeline, y=meanmins, group=Pipeline)) +
 	ggtitle("Time cost of RNAseq analysis pipelines") +
-	xlab("Unix time measure") +
+	xlab("Pipeline Name") +
 	ylab("Mean Minutes per Run") +
 	geom_bar(stat="identity", position="dodge", aes(fill=Pipeline)) +
 	geom_errorbar(position="dodge", aes(ymin=meanmins-sdmins, ymax=meanmins+sdmins)) +
 	theme_bw() +
+  facet_grid(~timemeasure, scales="free") +
 	scale_fill_grey() +
 	scale_color_grey() +
-	theme()
+	theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "none"
+    )
 
 print(pltimes.plot)
 
